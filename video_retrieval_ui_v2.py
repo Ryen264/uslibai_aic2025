@@ -680,6 +680,55 @@ class VideoRetrievalUI:
         except Exception as e:
             self.root.after(0, lambda: self.status_label.config(text=f"Error: {str(e)}"))
             
+    def convert_frame_idx(input_list):
+        """
+        Convert frame_n to frame_idx by looking up in CSV files under /database/map-keyframes.
+        
+        Args:
+            input_list (list[tuple[str, float]]): e.g. [("L30_V066_15", 0.8)]
+        
+        Returns:
+            list[dict[str, str, str, float]]: {
+                "frame_idx": frame_idx,
+                "video_name": video_name,
+                "frame_n": frame_n,
+                "score": score
+            }
+            e.g. [("frame_idx": "1202", "video_name": "L30_V066", "frame_n": 15, "score": 0.8)]
+        """
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        map_dir = os.path.join(base_dir, "database", "map-keyframes")
+
+        results = []
+
+        for name_score in input_list:
+            full_name, score = name_score
+            # split into video_name and frame_n
+            video_name, frame_n = full_name.rsplit("_", 1)
+            
+            csv_path = os.path.join(map_dir, f"{video_name}.csv")
+
+            if not os.path.exists(csv_path):
+                raise FileNotFoundError(f"CSV file not found for video: {video_name}")
+
+            frame_idx = None
+            with open(csv_path, "r", newline="", encoding="utf-8") as f:
+                reader = csv.reader(f)
+                for row in reader:
+                    if row and row[0] == frame_n:  # match frame_n
+                        frame_idx = row[3]  # 4th column is frame_idx
+                        break
+            
+            if frame_idx is None:
+                raise ValueError(f"Frame {frame_n} not found in {csv_path}")
+
+            results.append({
+                "frame_idx": frame_idx,
+                "video_name": video_name,
+                "frame_n": frame_n,
+                "score": score
+            })
+        return results
 
     """
     Call your backend API with text query.
@@ -693,20 +742,10 @@ class VideoRetrievalUI:
             return self.search_database_text(text_query)
         
         # Mock response for demonstration
-        mock_results = []
-        for i in range(20):  # Simulate 20 results for demo
-            mock_results.append({
-                "frame_id": f"img_{i:03d}",
-                "video_name": f"video_{(i//5)+1}",
-                "frame_id": f"frame_{i:04d}",
-                "image_url": f"https://picsum.photos/200/150?random={i}",
-                "metadata": {
-                    "video_name": f"sample_video_{(i//5)+1}.mp4",
-                    "frame_number": i * 10,
-                    "timestamp": f"00:0{i//10}:{(i*6)%60:02d}"
-                }
-            })
-        return mock_results
+        model_output = [("L30_V066_15", 0.85), ("L30_V066_20", 0.92)]
+
+        results = self.convert_frame_idx(model_output)
+        return results
         
     """
     Call your backend API with TXT file content.
@@ -1135,3 +1174,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
